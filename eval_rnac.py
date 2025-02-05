@@ -194,7 +194,7 @@ if __name__ == '__main__':
     parser.add_argument('--hard', default='False', type=str)
     parser.add_argument('--eval_episodes', default=10, type=int)
     parser.add_argument('--device', default='cpu', type=str)
-    parser.add_argument("--env", type=str, default='Hopper-v4', help="HalfCheetah-v3/Hopper-v3/Walker2d-v3")
+    parser.add_argument("--env", type=str, default='Hopper-v4', help="HalfCheetah-v4/Hopper-v3/Walker2d-v3")
     parser.add_argument("--max_train_steps", type=int, default=int(3e6), help="Maximum number of training steps")
     parser.add_argument("--evaluate_freq", type=float, default=5e3, help="Evaluate the policy every 'evaluate_freq' steps")
     parser.add_argument("--save_freq", type=int, default=20, help="Save frequency")

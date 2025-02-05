@@ -222,7 +222,7 @@ def main(args, number):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("Hyperparameters Setting for RNAC")
     # parser.add_argument("--env", type=str, default='Hopper-v3', help="HalfCheetah-v3/Hopper-v3/Walker2d-v3")
-    parser.add_argument("--env", type=str, default='Hopper-v4', help="HalfCheetah-v3/Hopper-v3/Walker2d-v3")
+    parser.add_argument("--env", type=str, default='Hopper-v4', help="HalfCheetah-v4/Hopper-v3/Walker2d-v3")
     parser.add_argument("--uncer_set", type=str, default='IPM', help="DS/IPM")
     parser.add_argument("--next_steps", type=int, default=2, help="Number of next states")
     parser.add_argument("--random_steps", type=int, default=int(25e3), help="Uniformlly sample action within random steps")

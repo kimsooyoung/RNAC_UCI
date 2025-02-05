@@ -1,8 +1,8 @@
 import gymnasium as gym
 
 # Create the Hopper-v4 environment
-env = gym.make("Hopper-v4", render_mode="human")
-# env = gym.make("HopperPerturbed-v4", render_mode="human")
+# env = gym.make("Hopper-v4", render_mode="human")
+env = gym.make("HopperPerturbed-v4", render_mode="human")
 
 # Reset the environment
 obs, info = env.reset()
