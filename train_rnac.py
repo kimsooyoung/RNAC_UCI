@@ -129,6 +129,7 @@ def main(args, number):
 
         while not done:
             episode_steps += 1
+
             a, a_logprob = agent.choose_action(s)
 
             if args.policy_dist == "Beta":
@@ -146,7 +147,6 @@ def main(args, number):
                 # Multi-run
                 v_min, index = torch.tensor(float('inf')), 0
                 noise_list, nexts_list, r_list = [], [], []
-
 
                 for i in range(args.next_steps):
                     obs, _ = env_reset.reset(state=s_org, x_pos=x_pos) 
@@ -176,16 +176,17 @@ def main(args, number):
 
             x_pos = np.array([info['x_position']])
             if args.use_state_norm:
-                #nexts = state_norm(nexts, update=False)
                 s_ = state_norm(s_)
             if args.use_reward_norm:
                 r = reward_norm(r)
             elif args.use_reward_scaling:
                 r = reward_scaling(r)
 
-            # When dead or win or reaching the max_episode_steps, done will be Ture, we need to distinguish them;
+            # When dead or win or reaching the max_episode_steps, 
+            # done will be Ture, we need to distinguish them;
             # dw means dead or win,there is no next state s';
-            # but when reaching the max_episode_steps,there is a next state s' actually.
+            # but when reaching the max_episode_steps,
+            # there is a next state s' actually.
             if done and episode_steps != args.max_episode_steps:
                 dw = True
             else:
@@ -193,6 +194,7 @@ def main(args, number):
 
             # Take the 'action'，but store the original 'a'（especially for Beta）
             replay_buffer.store(s, a, a_logprob, r, s_, dw, done)
+            
             s = copy.deepcopy(s_)
             s_org = copy.deepcopy(state_norm.denormal(s_, update=False))
             total_steps += 1
@@ -208,7 +210,10 @@ def main(args, number):
                 evaluate_reward = evaluate_policy(args, env_evaluate, agent, state_norm)
                 evaluate_rewards.append(evaluate_reward)
                 print("evaluate_num:{} \t evaluate_reward:{} \t".format(evaluate_num, evaluate_reward))
+                
+                # Record on Tensorboard 
                 writer.add_scalar('step_rewards_{}'.format(args.env), evaluate_rewards[-1], global_step=total_steps)
+                
                 # Save the rewards
                 if evaluate_num % args.save_freq == 0:
                     np.save('./data_train/RNAC_{}_env_{}_number_{}_seed_{}_GAMMA_{}.npy'.format(args.policy_dist, args.env, number, seed, GAMMA), np.array(evaluate_rewards))

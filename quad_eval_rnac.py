@@ -1,23 +1,26 @@
 import os
-import numpy as np
-# import gym
-import gymnasium as gym
-import argparse
 import pickle
+import argparse
+import numpy as np
+
+import loco_mujoco  # needed to register the environments
+import gymnasium as gym
+
 from normalization import Normalization, RewardScaling
 from replaybuffer import ReplayBuffer
 from ppo_continuous import PPO_continuous
 
 
-def evaluate_policy(args, env, agent, state_norm, springref, x):
+# def evaluate_policy(args, env, agent, state_norm, springref, x):
+def evaluate_policy(args, env, agent, state_norm):
     times = 3
     evaluate_reward = 0
     for _ in range(times):
-        s, _ = env.reset(
-            state=None, x_pos=None, 
-            springref=springref, leg_joint_stiffness=x
-        )
-        # s, _ = env.reset()
+        # s, _ = env.reset(
+        #     state=None, x_pos=None, 
+        #     springref=springref, leg_joint_stiffness=x
+        # )
+        s, _ = env.reset()
         if args.use_state_norm:
             s = state_norm(s, update=False)  # During the evaluating,update=False
         done = False
@@ -33,6 +36,9 @@ def evaluate_policy(args, env, agent, state_norm, springref, x):
                 s_ = state_norm(s_, update=False)
             episode_reward += r
             s = s_
+
+            env.render()
+
         evaluate_reward += episode_reward
 
     return evaluate_reward / times
@@ -60,28 +66,34 @@ def main(args):
     load_path = f"./models/RNAC_{args.env}_{GAMMA}"
     save_path = f"./perturbed_results/RNAC_{args.env}_{GAMMA}"
 
-    # get perturbed environment
-    i = args.env.find('-')
-    perturbed_env = f'{args.env[:i]}Perturbed{args.env[i:]}'
-    print(f"perturbed_env: {perturbed_env}")
     env = gym.make(
-        perturbed_env,
-        render_mode="human",
+        "LocoMujoco", 
+        env_name=args.env,
+        render_mode="human"
     )
+
+    # # TODO: get perturbed environment
+    # i = args.env.find('-')
+    # perturbed_env = f'{args.env[:i]}Perturbed{args.env[i:]}'
+    # print(f"perturbed_env: {perturbed_env}")
+    # env = gym.make(
+    #     perturbed_env,
+    #     render_mode="human",
+    # )
+
     # When evaluating the policy, we need to rebuild an environment
-    env_evaluate = gym.make(perturbed_env) 
+    # env_evaluate = gym.make(perturbed_env) 
     
     # Set random seed
-    # env.seed(seed)
-    # env.action_space.seed(seed)
     env.reset(seed=seed)
-    
+
     np.random.seed(seed)
 
     args.state_dim = env.observation_space.shape[0]
     args.action_dim = env.action_space.shape[0]
     args.max_action = float(env.action_space.high[0])
-    args.max_episode_steps = env._max_episode_steps  # Maximum number of steps per episode
+    # args.max_episode_steps = env._max_episode_steps  # Maximum number of steps per episode
+    args.max_episode_steps = 1000
     print("env={}".format(args.env))
     print("state_dim={}".format(args.state_dim))
     print("action_dim={}".format(args.action_dim))
@@ -98,7 +110,28 @@ def main(args):
     else:
         hard = True
 
-    # if args.env == 'Hopper-v3':
+    if args.env == 'UnitreeA1.simple':
+        avgs = []
+        stds = []
+
+        # for x in xs_legjntstif:
+        rewards = []
+        for _ in range(args.eval_episodes):
+            env.reset(seed=np.random.randint(1000))
+            evaluate_reward = evaluate_policy(
+                args, env, agent, state_norm
+            )
+            rewards.append(evaluate_reward)
+        
+        avg_reward = np.sum(rewards) / args.eval_episodes
+        print("---------------------------------------")
+        print(f' avg_reward : {avg_reward:.3f}')
+        print("---------------------------------------")
+        avgs.append(avg_reward)
+        stds.append(np.std(rewards))
+        # all p's are done
+        # save_evals(save_path, setting, avgs, stds, GAMMA)
+
     if args.env == 'Hopper-v4':
         # settings = ['leg_joint_stiffness', 'gravity', 'joint_damping']
         springref = 2.0
@@ -114,13 +147,13 @@ def main(args):
         avgs = []
         stds = []
         for x in xs_legjntstif:
-        #for x in ps_g:
-        #for x in ps_damp:
             rewards = []
             for _ in range(args.eval_episodes):
-                # env.seed(seed=np.random.randint(1000))
                 env.reset(seed=np.random.randint(1000))
-                evaluate_reward = evaluate_policy(args, env, agent, state_norm, springref, x)
+                evaluate_reward = evaluate_policy(
+                    args, env, agent, state_norm, 
+                    springref, x
+                )
                 rewards.append(evaluate_reward)
             
             avg_reward = np.sum(rewards) / args.eval_episodes
@@ -130,7 +163,7 @@ def main(args):
             avgs.append(avg_reward)
             stds.append(np.std(rewards))
         # all p's are done
-        # save_evals(save_path, setting, avgs, stds, GAMMA)
+        save_evals(save_path, setting, avgs, stds, GAMMA)
 
     if args.env == 'Walker2d-v3':
         # settings = ['foot_joint_stiffness', 'leg_joint_stiffness']
@@ -147,7 +180,9 @@ def main(args):
             rewards = []
             for _ in range(args.eval_episodes):
                 env.seed(seed=np.random.randint(1000))
-                evaluate_reward = evaluate_policy(args, env, agent, state_norm, x)
+                evaluate_reward = evaluate_policy(
+                    args, env, agent, state_norm, x
+                )
                 rewards.append(evaluate_reward)
             
             avg_reward = np.sum(rewards) / args.eval_episodes
@@ -178,7 +213,12 @@ def main(args):
             for _ in range(eval_episodes):
                 env.seed(seed=np.random.randint(1000))
                 #evaluate_reward = evaluate_policy(args, env, agent, state_norm, p)
-                evaluate_reward = evaluate_policy(args, env, agent, state_norm, fthigh_joint_stiffness, fshin_joint_stiffness, ffoot_joint_stiffness)
+                evaluate_reward = evaluate_policy(
+                    args, env, agent, state_norm, 
+                    fthigh_joint_stiffness, 
+                    fshin_joint_stiffness, 
+                    ffoot_joint_stiffness
+                )
                 rewards.append(evaluate_reward)
             # episodes for current p are done
             avg_reward = np.sum(rewards) / eval_episodes

@@ -85,6 +85,9 @@ To train an RNAC policy on `Hopper-v4` with DS uncertainty set, please run
 
 ```bash
 python train_rnac.py --env='Hopper-v4' --uncer_set='DS' --weight_reg=0.0
+
+# Check learning status
+tensorboard --logdir runs/RNAC/XXXX
 ```
 
 ## Evaluate Policy
@@ -109,6 +112,21 @@ We use [loco_mujoco](https://github.com/robfiras/loco-mujoco) as our environment
 
 ## Train Policy
 
+To train an RNAC policy on `UnitreeA1.simple` with DS uncertainty set, please run 
+
 ```bash
+python quad_train_rnac.py --env='UnitreeA1.simple' --uncer_set='IPM' --weight_reg=0.0
+
 python quad_train_rnac.py --env='UnitreeA1.simple' --uncer_set='DS' --weight_reg=0.0
+
+# Check learning status
+tensorboard --logdir runs/RNAC/XXXX
+```
+
+## Evaluate Policy
+
+To evaluate an RNAC policy on `UnitreeA1.simple`, please run
+
+```bash
+python quad_eval_rnac.py --env='UnitreeA1.simple'
 ```

@@ -22,8 +22,9 @@ def evaluate_policy(args, env, agent, state_norm):
     times = 3
     evaluate_reward = 0
     for _ in range(times):
-        s, _ = env.reset(state=None, x_pos=None)
-        # s, _ = env.reset()
+        # TODO
+        # s, _ = env.reset(state=None, x_pos=None)
+        s, _ = env.reset()
         if args.use_state_norm:
             s = state_norm(s, update=False)  # During the evaluating,update=False
         done = False
@@ -141,16 +142,20 @@ def main(args, number):
                 noise_list, nexts_list, r_list = [], [], []
 
                 for i in range(args.next_steps):
-                    obs, _ = env_reset.reset(state=s_org, x_pos=x_pos) 
+                    # TODO: adding state / x_pos
+                    # obs, _ = env_reset.reset(state=s_org, x_pos=x_pos) 
+                    obs, _ = env_reset.reset() 
+
                     s_, r, done, truncated, info = env_reset.step(action)
                     r_list.append(r)
+                    print(f"info: {info}")
                     noise_list.append(info['noise'])
-                
+
                     if args.use_state_norm:
                         s_ = state_norm(s_, update=False)
-                
+
                     nexts_list.append(s_)
-                
+
                     with torch.no_grad():   
                         if agent.critic(torch.tensor(s_, dtype=torch.float)) < v_min:
                             v_min = agent.critic(torch.tensor(s_, dtype=torch.float))
@@ -166,55 +171,54 @@ def main(args, number):
             else:
                 s_, r, done, truncated, info = env.step(action)
 
-    #         x_pos = np.array([info['x_position']])
-    #         if args.use_state_norm:
-    #             #nexts = state_norm(nexts, update=False)
-    #             s_ = state_norm(s_)
-    #         if args.use_reward_norm:
-    #             r = reward_norm(r)
-    #         elif args.use_reward_scaling:
-    #             r = reward_scaling(r)
+            # x_pos = np.array([info['x_position']])
+            if args.use_state_norm:
+                #nexts = state_norm(nexts, update=False)
+                s_ = state_norm(s_)
+            if args.use_reward_norm:
+                r = reward_norm(r)
+            elif args.use_reward_scaling:
+                r = reward_scaling(r)
 
-    #         # When dead or win or reaching the max_episode_steps, done will be Ture, we need to distinguish them;
-    #         # dw means dead or win,there is no next state s';
-    #         # but when reaching the max_episode_steps,there is a next state s' actually.
-    #         if done and episode_steps != args.max_episode_steps:
-    #             dw = True
-    #         else:
-    #             dw = False
+            # When dead or win or reaching the max_episode_steps, done will be Ture, we need to distinguish them;
+            # dw means dead or win,there is no next state s';
+            # but when reaching the max_episode_steps,there is a next state s' actually.
+            if done and episode_steps != args.max_episode_steps:
+                dw = True
+            else:
+                dw = False
 
-    #         # Take the 'action'，but store the original 'a'（especially for Beta）
-    #         replay_buffer.store(s, a, a_logprob, r, s_, dw, done)
-    #         s = copy.deepcopy(s_)
-    #         s_org = copy.deepcopy(state_norm.denormal(s_, update=False))
-    #         total_steps += 1
+            # Take the 'action'，but store the original 'a'（especially for Beta）
+            replay_buffer.store(s, a, a_logprob, r, s_, dw, done)
+            s = copy.deepcopy(s_)
+            s_org = copy.deepcopy(state_norm.denormal(s_, update=False))
+            total_steps += 1
 
-    #         # When the number of transitions in buffer reaches batch_size,then update
-    #         if replay_buffer.count == args.batch_size:
-    #             agent.update(replay_buffer, total_steps)
-    #             replay_buffer.count = 0
+            # When the number of transitions in buffer reaches batch_size,then update
+            if replay_buffer.count == args.batch_size:
+                agent.update(replay_buffer, total_steps)
+                replay_buffer.count = 0
 
-    #         # Evaluate the policy every 'evaluate_freq' steps
-    #         if total_steps % args.evaluate_freq == 0:
-    #             evaluate_num += 1
-    #             evaluate_reward = evaluate_policy(args, env_evaluate, agent, state_norm)
-    #             evaluate_rewards.append(evaluate_reward)
-    #             print("evaluate_num:{} \t evaluate_reward:{} \t".format(evaluate_num, evaluate_reward))
-    #             writer.add_scalar('step_rewards_{}'.format(args.env), evaluate_rewards[-1], global_step=total_steps)
-    #             # Save the rewards
-    #             if evaluate_num % args.save_freq == 0:
-    #                 np.save('./data_train/RNAC_{}_env_{}_number_{}_seed_{}_GAMMA_{}.npy'.format(args.policy_dist, args.env, number, seed, GAMMA), np.array(evaluate_rewards))
+            # Evaluate the policy every 'evaluate_freq' steps
+            if total_steps % args.evaluate_freq == 0:
+                evaluate_num += 1
+                evaluate_reward = evaluate_policy(args, env_evaluate, agent, state_norm)
+                evaluate_rewards.append(evaluate_reward)
+                print("evaluate_num:{} \t evaluate_reward:{} \t".format(evaluate_num, evaluate_reward))
+                writer.add_scalar('step_rewards_{}'.format(args.env), evaluate_rewards[-1], global_step=total_steps)
+                # Save the rewards
+                if evaluate_num % args.save_freq == 0:
+                    np.save('./data_train/RNAC_{}_env_{}_number_{}_seed_{}_GAMMA_{}.npy'.format(args.policy_dist, args.env, number, seed, GAMMA), np.array(evaluate_rewards))
 
-    #             # save actor, critic for evaluation in perturbed environment
-    #             if evaluate_reward > max_value:
-    #                 save_agent(agent, save_path, state_norm, reward_scaling)
-    #                 max_value = evaluate_reward
+                # save actor, critic for evaluation in perturbed environment
+                if evaluate_reward > max_value:
+                    save_agent(agent, save_path, state_norm, reward_scaling)
+                    max_value = evaluate_reward
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("Hyperparameters Setting for RNAC")
-    # parser.add_argument("--env", type=str, default='Hopper-v3', help="HalfCheetah-v3/Hopper-v3/Walker2d-v3")
-    parser.add_argument("--env", type=str, default='Hopper-v4', help="HalfCheetah-v4/Hopper-v3/Walker2d-v3")
+    parser.add_argument("--env", type=str, default='UnitreeA1.simple', help="HalfCheetah-v4/Hopper-v3/Walker2d-v3")
     parser.add_argument("--uncer_set", type=str, default='IPM', help="DS/IPM")
     parser.add_argument("--next_steps", type=int, default=2, help="Number of next states")
     parser.add_argument("--random_steps", type=int, default=int(25e3), help="Uniformlly sample action within random steps")
@@ -248,6 +252,7 @@ if __name__ == '__main__':
     parser.add_argument("--GAMMA", type=str, default='0', help="file name")
 
     args = parser.parse_args()
+    
     # make folders to dump results
     if not os.path.exists("./models"):
         os.makedirs("./models")
