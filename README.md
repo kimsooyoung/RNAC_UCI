@@ -10,7 +10,7 @@ Original Paper from [Natural Actor-Critic for Robust Reinforcement Learning with
 ```
 numpy==1.23.5
 gymnasium==0.29.1
-mujoco==2.3.3
+mujoco==2.3.7
 torch==2.6.0
 ```
 ## Usage
@@ -101,4 +101,14 @@ python eval_rnac.py --env='Hopper-v4'
 parser.add_argument("--env", type=str, default='Hopper-v4', help="HalfCheetah-v4/Hopper-v4/Walker2d-v4")
 ...
 save_path = f"./perturbed_results/RNAC_{args.env}_{GAMMA}"
+```
+
+## Train Quadruped robot
+
+We use [loco_mujoco](https://github.com/robfiras/loco-mujoco) as our environment. Checkout their documentations for details.
+
+## Train Policy
+
+```bash
+python quad_train_rnac.py --env='UnitreeA1.simple' --uncer_set='DS' --weight_reg=0.0
 ```
