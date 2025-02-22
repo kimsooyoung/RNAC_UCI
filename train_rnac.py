@@ -171,7 +171,7 @@ def main(args, number):
                     ridx = index
                 
                 s_, r, done, truncated, info = env.step(np.concatenate((action, noise_list[ridx])))
-            else:
+            else: # IPM
                 s_, r, done, truncated, info = env.step(action)
 
             x_pos = np.array([info['x_position']])

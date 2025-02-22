@@ -204,6 +204,8 @@ class PPO_continuous():
                     weight_norm.append(torch.norm(layer.state_dict()['weight']) ** 2) 
                     bias_norm.append(torch.norm(layer.state_dict()['bias']) ** 2)
             reg_norm = torch.sqrt(torch.sum(torch.stack(weight_norm)) + torch.sum(torch.stack(bias_norm[0:-1])))
+            # self.gamma * (1.0 - dw) * vs_ - vs - self.alpha * a_logprob.sum(dim=1, keepdim=True)  : Advantage TD
+            # self.weight_reg * reg_norm : Reg 
             deltas = r + self.gamma * (1.0 - dw) * vs_ - vs - self.alpha * a_logprob.sum(dim=1, keepdim=True) - self.weight_reg * reg_norm
             for delta, d in zip(reversed(deltas.flatten().numpy()), reversed(done.flatten().numpy())):
                 gae = delta + self.gamma * self.lamda * gae * (1.0 - d)
