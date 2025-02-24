@@ -25,21 +25,35 @@ def evaluate_policy(args, env, agent, state_norm):
         # TODO
         # s, _ = env.reset(state=None, x_pos=None)
         s, _ = env.reset()
+        
         if args.use_state_norm:
             s = state_norm(s, update=False)  # During the evaluating,update=False
+        
         done = False
         episode_reward = 0
+        episode_number = 0
+        
         while not done:
+            
             a = agent.evaluate(s)  # We use the deterministic policy during the evaluating
+            
             if args.policy_dist == "Beta":
                 action = 2 * (a - 0.5) * args.max_action  # [0,1]->[-max,max]
             else:
                 action = a
+
             s_, r, done, _, _ = env.step(action)
+
+            episode_number += 1
+            if episode_number > args.max_episode_steps:
+                done = True
+
             if args.use_state_norm:
                 s_ = state_norm(s_, update=False)
+            
             episode_reward += r
             s = s_
+
         evaluate_reward += episode_reward
 
     return evaluate_reward / times
@@ -103,6 +117,8 @@ def main(args, number):
         reward_norm = Normalization(shape=1)
     elif args.use_reward_scaling:  # Trick 4:reward scaling
         reward_scaling = RewardScaling(shape=1, gamma=args.gamma)
+
+    # print(f"args.max_train_steps: {args.max_train_steps}")
 
     while total_steps < args.max_train_steps:
 
@@ -204,8 +220,12 @@ def main(args, number):
                 evaluate_num += 1
                 evaluate_reward = evaluate_policy(args, env_evaluate, agent, state_norm)
                 evaluate_rewards.append(evaluate_reward)
+                # print("total_steps:{} \t evaluate_freq:{} \t".format(total_steps, args.evaluate_freq))
                 print("evaluate_num:{} \t evaluate_reward:{} \t".format(evaluate_num, evaluate_reward))
+
+                # Record on Tensorboard 
                 writer.add_scalar('step_rewards_{}'.format(args.env), evaluate_rewards[-1], global_step=total_steps)
+                
                 # Save the rewards
                 if evaluate_num % args.save_freq == 0:
                     np.save('./data_train/RNAC_{}_env_{}_number_{}_seed_{}_GAMMA_{}.npy'.format(args.policy_dist, args.env, number, seed, GAMMA), np.array(evaluate_rewards))
