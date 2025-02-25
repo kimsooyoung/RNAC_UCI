@@ -234,6 +234,7 @@ def main(args, number):
                 if evaluate_reward > max_value:
                     save_agent(agent, save_path, state_norm, reward_scaling)
                     max_value = evaluate_reward
+                    print(f"max value found from total_steps : {total_steps}")
 
 
 if __name__ == '__main__':

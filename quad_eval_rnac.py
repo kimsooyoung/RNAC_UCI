@@ -5,6 +5,7 @@ import numpy as np
 
 import loco_mujoco  # needed to register the environments
 import gymnasium as gym
+from gymnasium.wrappers import RecordVideo
 
 from normalization import Normalization, RewardScaling
 from replaybuffer import ReplayBuffer
@@ -69,8 +70,14 @@ def main(args):
     env = gym.make(
         "LocoMujoco", 
         env_name=args.env,
-        render_mode="human"
+        # render_mode="rgb_array",
+        render_mode="human",
     )
+    # env = RecordVideo(
+    #     env,
+    #     video_folder="videos/", 
+    #     episode_trigger=lambda e: True
+    # )
 
     # # TODO: get perturbed environment
     # i = args.env.find('-')
@@ -231,6 +238,7 @@ def main(args):
         # all p's are done
         save_evals(save_path, setting, avgs, stds, GAMMA)
 
+    env.close()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("Hyperparameters Setting for RNAC")
