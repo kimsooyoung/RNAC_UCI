@@ -19,13 +19,10 @@ import gymnasium as gym
 #  -0.41239959  1.75672855 -0.53530012  0.67946995 -0.16635693 
 # -0.20215387]
 
-# state[self._goal_vel_idx]: [0.23655193]
+def my_reward_function(state, action, next_state):
+    # TODO: Fill in reward factors and return
+    return total_reward
 
-# # define what ever reward function you want
-# def my_reward_function(state, action, next_state):
-#     print(f"state: {state}")
-#     # print(f"action: {action}")
-#     return -np.mean(action)     # here we just return the negative mean of the action
 
 def my_reward_function(state, action, next_state):
     # Extract necessary state variables using correct indices
@@ -76,19 +73,12 @@ def my_reward_function(state, action, next_state):
 
     return total_reward
 
-
 env = gym.make(
     "LocoMujoco", 
     env_name="UnitreeA1.simple", 
     reward_type="custom",
     reward_params=dict(reward_callback=my_reward_function)
 )
-
-# env = gym.make(
-#     "LocoMujoco", 
-#     env_name="UnitreeA1.simple", 
-#     render_mode="rgb_array",
-# )
 
 action_dim = env.action_space.shape[0]
 
@@ -116,16 +106,3 @@ while True:
 
     env.render()
     i += 1
-
-
-# nstate: [
-#  -1.79798385e-01  6.57446909e-02  1.60791786e-03  1.57964472e-02
-#   3.03064529e-02  6.66157351e-01 -2.25484991e+00 -2.52808590e-01
-#   8.71125309e-01 -1.83586552e+00 -9.76272652e-03  9.64864569e-01
-#  -1.90421213e+00  1.24228157e-02  6.61846209e-01 -1.99788884e+00
-#   1.66890503e-01  5.65217167e-02  1.61536288e-01  2.47443902e+00
-#  -3.48732229e-01  1.59915459e+00  4.49800881e+00  5.44773532e-01
-#  -1.15422572e+01 -4.08258618e+00 -1.41032894e+00  5.11723873e+00
-#   1.26486699e+01  9.15207775e+00 -5.60114214e+00 -3.26576865e+00
-#   1.93708933e+00  9.84778529e+00  1.00000000e+00  0.00000000e+00
-#   2.38642567e-01]
