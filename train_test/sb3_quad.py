@@ -6,7 +6,8 @@ import loco_mujoco  # needed to register the environments
 import gymnasium as gym
 from gymnasium.wrappers import RecordVideo
 
-from stable_baselines3 import SAC, TD3, A2C, PPO
+import sb3_contrib
+import stable_baselines3
 
 # Create directories to hold models and logs
 model_dir = "models"
@@ -15,49 +16,44 @@ os.makedirs(model_dir, exist_ok=True)
 os.makedirs(log_dir, exist_ok=True)
 
 
-def train(env, sb3_algo):
-    match sb3_algo:
-        case 'SAC':
-            model = SAC('MlpPolicy', env, verbose=1, device='cuda', tensorboard_log=log_dir)
-        case 'TD3':
-            model = TD3('MlpPolicy', env, verbose=1, device='cuda', tensorboard_log=log_dir)
-        case 'A2C':
-            model = A2C('MlpPolicy', env, verbose=1, device='cuda', tensorboard_log=log_dir)
-        case 'PPO':
-            model = PPO('MlpPolicy', env, verbose=1, device='cuda', tensorboard_log=log_dir)
-        case _:
-            print('Algorithm not found')
-            return
+def get_model_class(algo_name):
+    """Retrieve the SB3 algorithm class dynamically."""
 
-    TIMESTEPS = 75_000
-    # iters = 0
-    # while True:
-    #     iters += 1
+    try:
+        if algo_name in ["TQC", "QR-DQN", "MaskablePPO", "TRPO", "ARS", "RecurrentPPO", "CrossQ"]:
+            print("You picked SB3_Contrib Algorithm")
+            return getattr(sb3_contrib, algo_name)
+        else:
+            return getattr(stable_baselines3, algo_name)
+    except AttributeError:
+        raise ValueError(f"Invalid algorithm: {algo_name}. Available options: A2C, DDPG, DQN, PPO, SAC, TD3")
 
-    #     model.learn(total_timesteps=TIMESTEPS, reset_num_timesteps=False)
-    #     model.save(f"{model_dir}/{sb3_algo}_{TIMESTEPS*iters}")
+
+def train(env, sb3_class, model_path):
+
+    try:
+        model = sb3_class(
+            "MlpPolicy", env, 
+            verbose=1, device="cuda", 
+            tensorboard_log=log_dir,
+        )
+    except Exception as e:
+        print(f'Algorithm not found: {e}')
+        return
+
+    TIMESTEPS = 1_000_000
 
     model.learn(
         total_timesteps=TIMESTEPS, 
         reset_num_timesteps=False,
         progress_bar=True
     )
-    model.save(f"{model_dir}/{sb3_algo}")
+    model.save(f"{model_dir}/{model_path}")
 
-def test(env, sb3_algo, path_to_model):
 
-    match sb3_algo:
-        case 'SAC':
-            model = SAC.load(path_to_model, env=env)
-        case 'TD3':
-            model = TD3.load(path_to_model, env=env)
-        case 'A2C':
-            model = A2C.load(path_to_model, env=env)
-        case 'PPO':
-            model = PPO.load(path_to_model, env=env)
-        case _:
-            print('Algorithm not found')
-            return
+def test(env, sb3_class, path_to_model):
+    
+    model = sb3_class.load(path_to_model, env=env)
 
     obs = env.reset()[0]
     done = False
@@ -72,6 +68,9 @@ def test(env, sb3_algo, path_to_model):
             extra_steps -= 1
             if extra_steps < 0:
                 break
+    
+    env.close()
+
 
 def my_reward_function(state, action, next_state):
     # Extract necessary state variables using correct indices
@@ -122,17 +121,8 @@ def my_reward_function(state, action, next_state):
 
     return total_reward
 
-if __name__ == '__main__':
 
-    # create an environment with a Muscle Humanoid running with motion capture data (real dataset type)
-    
-    # gymenv = gym.make(
-    #     "LocoMujoco", 
-    #     env_name="UnitreeA1.simple",
-    #     # render_mode=None,
-    #     # render_mode="human",
-    #     render_mode="rgb_array",
-    # )
+if __name__ == '__main__':
 
     # Parse command line inputs
     parser = argparse.ArgumentParser(description='Train or test model.')
@@ -143,44 +133,41 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--test', metavar='path_to_model')
     args = parser.parse_args()
 
-    sb3_algo = "PPO"
-
-    # try:
-    #     sb3_class = get_model_class(args.sb3_algo)
-    # except ValueError as e:
-    #     print(e)
-    #     exit(1)
+    try:
+        sb3_class = get_model_class(args.sb3_algo)
+    except ValueError as e:
+        print(e)
+        exit(1)
 
     if args.train:
         gymenv = gym.make(
             "LocoMujoco", 
             env_name=args.gymenv,
-            render_mode="rgb_array",
             # Custom reward applied
             reward_type="custom",
             reward_params=dict(reward_callback=my_reward_function)
         )
-        train(gymenv, sb3_algo)
+        train(gymenv, sb3_class, args.sb3_algo)
+
+        gymenv.close()
 
     if args.test:
         if os.path.isfile(args.test):
             eval_env = gym.make(
-                "LocoMujoco", 
+                "LocoMujoco",
                 env_name=args.gymenv,
                 render_mode="human",
                 # Custom reward applied
                 reward_type="custom",
                 reward_params=dict(reward_callback=my_reward_function)
             )
-            test(eval_env, sb3_algo, args.test)
+            test(eval_env, sb3_class, args.test)
+            eval_env.close()
         else:
             print(f'{args.test} not found.')
 
-    gymenv.close()
-
 # python sb3_quad.py UnitreeA1.simple PPO None -t
 # python sb3_quad.py UnitreeA1.simple PPO None -s ./models/PPO.zip
-
-
+# 
 # tensorboard --logdir logs
 # ./models/PPO_7050000.zip
