@@ -2,73 +2,62 @@ import numpy as np
 from loco_mujoco import LocoEnv
 import gymnasium as gym
 
-
-# state: [-2.02338202e-01 -1.66293944e-01 -4.30141854e-02 -1.06729561e-02
-#   1.78151211e-01  1.06543480e+00 -1.89053155e+00  2.46991746e-01
-#   1.35588951e+00 -2.16504495e+00 -1.80170827e-01  7.31700626e-01
-#  -1.81934680e+00  8.85233814e-01  7.49501567e-01 -2.52614014e+00
-#   1.54939126e-01  8.60650392e-02 -6.68341116e-01  8.11738021e+00
-#   7.28012412e-01  5.41277312e-01 -1.43380141e+01 -2.36766944e+00
-#   8.36026893e+00 -5.09921624e-01 -4.88007541e+00 -3.71089738e+00
-#  -2.10297832e+01 -9.46518217e+00  1.03049143e+00 -1.42685263e+01
-#  -1.15428943e+01 -7.33749440e+00  1.00000000e+00  0.00000000e+00
-#   2.36557250e-01]
-# action: [
-#  -0.13810948 -0.76405394 -1.70220186 -0.30373292 -0.80036508 
-# -1.02428249
-#  -0.41239959  1.75672855 -0.53530012  0.67946995 -0.16635693 
-# -0.20215387]
+# global prev_action
+prev_action = None
 
 def my_reward_function(state, action, next_state):
-    # TODO: Fill in reward factors and return
-    return total_reward
+    global prev_action
 
-
-def my_reward_function(state, action, next_state):
     # Extract necessary state variables using correct indices
-    vel_x, vel_y = next_state[16], next_state[17]  # trunk_tx and trunk_ty (XY velocity)
+    vel_x, vel_y = state[16], state[17]  # trunk_tx and trunk_ty (XY velocity)
+    cos_sine = state[[34, 35]]
+    
     cmd_vel = state[36]  # Desired velocity
     cmd_yaw_sin, cmd_yaw_cos = state[34], state[35]  # Desired velocity angle as sine-cosine
-    vel_yaw = next_state[21]  # trunk_rotation velocity (yaw velocity)
-    vel_z = next_state[18]  # trunk_tz velocity (Z-axis movement)
+    vel_yaw = state[21]  # trunk_rotation velocity (yaw velocity)
     
-    pos_z, h_target = next_state[2], state[2]  # trunk_tilt as base height (approximate)
-    
-    prev_action = state[-12:]  # Last 12 elements as previous action
-    theta = state[4:16]  # Joint angles
-    theta_default = np.zeros_like(theta)  # Assuming default is zero
-
     # Convert desired yaw to angle
     cmd_yaw = np.arctan2(cmd_yaw_sin, cmd_yaw_cos)
-
     tracking_sigma = 0.25
-
+    
     # Tracking Linear Velocity (XY)
-    track_lin_reward = np.exp(-((cmd_vel - np.sqrt(vel_x**2 + vel_y**2))**2) / tracking_sigma)
+    des_vel = state[36] * cos_sine
+    curr_velocity_xy = np.array([vel_x, vel_y])
+    lin_vel_error = np.sum((des_vel - curr_velocity_xy)**2)
+    track_lin_reward = np.exp(-lin_vel_error / tracking_sigma)
 
     # Tracking Angular Velocity (Yaw)
-    track_ang_reward = np.exp(-((cmd_yaw - vel_yaw) ** 2) / tracking_sigma)
+    # track_ang_reward = np.exp(-((cmd_yaw - vel_yaw) ** 2) / tracking_sigma)
 
     # Penalizing Z-Axis Linear Velocity
+    vel_z = state[18]  # trunk_tz velocity (Z-axis movement)
     penalize_z = vel_z ** 2
 
     # Penalizing Action Rate (Smooth actions)
-    action_rate_penalty = np.sum((action - prev_action) ** 2)
+    if prev_action is None:
+        action_rate_penalty = 0.0
+    else:
+        action_rate_penalty = np.sum((action - prev_action) ** 2)
+        prev_action = action
 
-    # # Penalizing Deviation from Default Pose
-    # pose_deviation_penalty = -np.sum((theta - theta_default) ** 2)
+    # Penalizing Deviation from Default Pose
+    theta = state[4:16]  # Joint angles
+    theta_default = np.zeros_like(theta)  # Assuming default is zero
+    pose_deviation_penalty = np.sum((theta - theta_default) ** 2)
 
     # Penalizing Base Height Deviation
+    h_target = -0.17
+    pos_z = state[0]  # trunk_tilt as base height (approximate)
     height_deviation_penalty = (pos_z - h_target) ** 2
 
     # Total reward
     total_reward = (
-        track_lin_reward +
-        track_ang_reward +
-        penalize_z +
-        action_rate_penalty +
-        # pose_deviation_penalty +
-        height_deviation_penalty
+        1.0 * track_lin_reward +
+        # track_ang_reward +
+        -1.0 * penalize_z +
+        -0.005 * action_rate_penalty +
+        -0.1 * pose_deviation_penalty +
+        -50.0 * height_deviation_penalty
     )
 
     return total_reward
