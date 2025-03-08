@@ -1,6 +1,8 @@
+import time
 import numpy as np
-from loco_mujoco import LocoEnv
 import gymnasium as gym
+
+from loco_mujoco import LocoEnv
 
 
 # state: [-2.02338202e-01 -1.66293944e-01 -4.30141854e-02 -1.06729561e-02
@@ -20,6 +22,8 @@ import gymnasium as gym
 # -0.20215387]
 
 def my_reward_function(state, action, next_state):
+    print(f"q_trunk_tz: {state[4:16]}")
+
     # Extract necessary state variables using correct indices
     vel_x, vel_y = next_state[16], next_state[17]  # trunk_tx and trunk_ty (XY velocity)
     cmd_vel = state[36]  # Desired velocity
@@ -71,6 +75,7 @@ def my_reward_function(state, action, next_state):
 env = gym.make(
     "LocoMujoco", 
     env_name="UnitreeA1.simple", 
+    render_mode="human",
     reward_type="custom",
     reward_params=dict(reward_callback=my_reward_function)
 )
@@ -86,8 +91,16 @@ while True:
     if i == 1000 or terminated:
         env.reset()
         i = 0
-    action = np.random.randn(action_dim)
+    # action = np.random.randn(action_dim)
+    action = np.array([
+        0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 
+        0.0, 0.0, 0.0
+    ])
     nstate, reward, terminated, truncated, info = env.step(action)
+
+    time.sleep(0.1)
 
     print(f"reward: {reward}")
     # reward: 1204.3052036815045
