@@ -140,11 +140,11 @@ def my_reward_function(state, action, next_state):
 
     # Total reward
     total_reward = (
-        1.0 * track_lin_reward +
+        2.0 * track_lin_reward +
         0.2 * track_ang_reward +
-        -1.0 * penalize_z +
-        -0.005 * action_rate_penalty +
-        -0.01 * pose_deviation_penalty +
+        -2.0 * penalize_z +
+        -0.0025 * action_rate_penalty +
+        -0.1 * pose_deviation_penalty +
         -50.0 * height_deviation_penalty +
         -0.0 * rew_contact_forces
     )
