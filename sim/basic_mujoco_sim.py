@@ -2,6 +2,7 @@ import mujoco
 import mujoco_viewer
 
 ROBOT_SCENE = "./unitree_a1/scene.xml" # Robot scene
+ROBOT_SCENE = "./unitree_go1/scene_torque.xml" # Robot scene
 
 mj_model = mujoco.MjModel.from_xml_path(ROBOT_SCENE)
 mj_data = mujoco.MjData(mj_model)
