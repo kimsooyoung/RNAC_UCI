@@ -3,14 +3,13 @@ import pickle
 import argparse
 import numpy as np
 
+import loco_mujoco  # needed to register the environments
 import gymnasium as gym
 from gymnasium.wrappers import RecordVideo
 
 from normalization import Normalization, RewardScaling
 from replaybuffer import ReplayBuffer
 from ppo_continuous import PPO_continuous
-
-from sim.go1_mujoco_env import Go1MujocoEnv
 
 
 # def evaluate_policy(args, env, agent, state_norm, springref, x):
@@ -47,11 +46,11 @@ def evaluate_policy(args, env, agent, state_norm):
     
 
 def load_agent(agent, load_path, device):
-    agent.actor.load(f'{load_path}/quadruped_actor', device=device)
-    agent.critic.load(f'{load_path}/quadruped_critic', device=device)
-    with open(f'{load_path}/quadruped_state_norm', 'rb') as file1:
+    agent.actor.load(f'{load_path}_actor', device=device)
+    agent.critic.load(f'{load_path}_critic', device=device)
+    with open(f'{load_path}_state_norm', 'rb') as file1:
         state_norm = pickle.load(file1)
-    with open(f'{load_path}/quadruped_reward_scaling', 'rb') as file2:
+    with open(f'{load_path}_reward_scaling', 'rb') as file2:
         reward_scaling = pickle.load(file2)
 
     return agent, state_norm, reward_scaling
@@ -139,12 +138,16 @@ def my_reward_function(state, action, next_state):
 def main(args):
     seed, GAMMA = args.seed, args.GAMMA
     # evaluate PPO on perturbed environments
-    load_path = f"./models/{args.model_path}"
+    load_path = f"./models/RNAC_{args.env}_{GAMMA}"
     save_path = f"./perturbed_results/RNAC_{args.env}_{GAMMA}"
 
-    env = Go1MujocoEnv(
-        ctrl_type="torque",
+    env = gym.make(
+        "LocoMujoco", 
+        env_name=args.env,
         render_mode="human",
+        reward_type="custom",
+        reward_params=dict(reward_callback=my_reward_function),
+        use_foot_forces=True,
     )
 
     # # TODO: get perturbed environment
@@ -184,26 +187,6 @@ def main(args):
         hard = False
     else:
         hard = True
-
-    if args.env == 'Go1':
-        avgs = []
-        stds = []
-
-        # for x in xs_legjntstif:
-        rewards = []
-        for _ in range(args.eval_episodes):
-            env.reset(seed=np.random.randint(1000))
-            evaluate_reward = evaluate_policy(
-                args, env, agent, state_norm
-            )
-            rewards.append(evaluate_reward)
-        
-        avg_reward = np.sum(rewards) / args.eval_episodes
-        print("---------------------------------------")
-        print(f' avg_reward : {avg_reward:.3f}')
-        print("---------------------------------------")
-        avgs.append(avg_reward)
-        stds.append(np.std(rewards))
 
     if args.env == 'UnitreeA1.simple':
         avgs = []
@@ -330,11 +313,10 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("Hyperparameters Setting for RNAC")
-    parser.add_argument("--model_path",default=None,type=str,help="Path to the model (.zip).")
     parser.add_argument('--hard', default='False', type=str)
     parser.add_argument('--eval_episodes', default=10, type=int)
     parser.add_argument('--device', default='cpu', type=str)
-    parser.add_argument("--env", type=str, default='Go1', help="A1/Go1/HalfCheetah-v4/Hopper-v3/Walker2d-v3")
+    parser.add_argument("--env", type=str, default='Hopper-v4', help="HalfCheetah-v4/Hopper-v3/Walker2d-v3")
     parser.add_argument("--max_train_steps", type=int, default=int(3e6), help="Maximum number of training steps")
     parser.add_argument("--evaluate_freq", type=float, default=5e3, help="Evaluate the policy every 'evaluate_freq' steps")
     parser.add_argument("--save_freq", type=int, default=20, help="Save frequency")

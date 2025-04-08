@@ -128,5 +128,5 @@ tensorboard --logdir runs/RNAC/XXXX
 To evaluate an RNAC policy on `UnitreeA1.simple`, please run
 
 ```bash
-python quad_eval_rnac.py --env='UnitreeA1.simple'
+python quad_eval_rnac.py --env='Go1' --model_path=2025-04-07_19-17-38
 ```

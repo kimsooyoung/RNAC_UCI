@@ -1,22 +1,22 @@
 import os
 import torch
 import numpy as np
-
-import time
-import argparse
-import pickle
-import copy
-import random
-import gymnasium as gym
-
-from torch.distributions import Uniform
 from torch.utils.tensorboard import SummaryWriter
 
+import loco_mujoco  # needed to register the environments
+import gymnasium as gym
+
+import argparse
+import pickle
+import math
+import random
+import copy
+import mujoco_py
 from normalization import Normalization, RewardScaling
 from replaybuffer import ReplayBuffer
 from ppo_continuous import PPO_continuous
+from torch.distributions import Uniform
 
-from sim.go1_mujoco_env import Go1MujocoEnv
 
 def evaluate_policy(args, env, agent, state_norm):
     times = 3
@@ -68,22 +68,115 @@ def save_agent(agent, save_path, state_norm, reward_scaling):
         pickle.dump(reward_scaling, file2)
 
 
+# global prev_action
+prev_action = None
+
+def my_reward_function(state, action, next_state):
+    global prev_action
+
+    # Extract necessary state variables using correct indices
+    vel_x, vel_y = state[16], state[17]  # trunk_tx and trunk_ty (XY velocity)
+    vel_yaw = state[21]  # trunk_rotation velocity (yaw velocity)
+    cos_sine = state[[34, 35]]
+    
+    cmd_vel = state[36]  # Desired velocity
+    cmd_yaw_sin, cmd_yaw_cos = state[34], state[35]  # Desired velocity angle as sine-cosine
+    
+    # Convert desired yaw to angle
+    cmd_yaw = np.arctan2(cmd_yaw_sin, cmd_yaw_cos)
+    tracking_sigma = 0.25
+    
+    # Tracking Linear Velocity (XY)
+    des_vel = state[36]
+    curr_velocity_xy = np.sqrt([vel_x**2 + vel_y**2])[0]
+    # lin_vel_error = (des_vel - curr_velocity_xy)**2
+    track_lin_reward = (des_vel - curr_velocity_xy)**2
+    # track_lin_reward = np.exp(-lin_vel_error / tracking_sigma)
+
+    # Tracking Angular Velocity (Yaw)
+    track_ang_reward = np.exp(-((vel_yaw) ** 2) / tracking_sigma)
+
+    # Penalizing Z-Axis Linear Velocity
+    vel_z = state[18]  # trunk_tz velocity (Z-axis movement)
+    penalize_z = vel_z ** 2
+
+    # Penalizing Action Rate (Smooth actions)
+    if prev_action is None:
+        action_rate_penalty = 0.0
+    else:
+        action_rate_penalty = np.sum((action - prev_action) ** 2)
+    prev_action = action.copy()
+
+    # Penalizing Deviation from Default Pose
+    theta = state[4:16]  # Joint angles
+    theta_default = np.zeros_like(theta)  # Assuming default is zero
+    pose_deviation_penalty = np.sum(abs(theta - theta_default))
+
+    # Penalizing Base Height Deviation
+    h_target = -0.17
+    pos_z = state[0]  # trunk_tilt as base height (approximate)
+    height_deviation_penalty = (pos_z - h_target) ** 2
+
+    # TODO: feet_air_time
+    feet_indices = [39, 42, 45, 48]  # Indices for foot contact z-axis forces
+    contact = state[feet_indices] < -0.01
+    # contact = state[37:]
+    # print(f"contact: {contact}")
+
+    # Penalize high contact forces
+    max_contact_force = 0.1
+    rew_contact_forces = np.sum(
+        (np.linalg.norm(state[37:]) - max_contact_force
+    ).clip(min=0.))
+
+    # print(f"""
+    #     track_lin_reward: {track_lin_reward}
+    #     track_ang_reward: {track_ang_reward}
+    #     penalize_z: {penalize_z}
+    #     action_rate_penalty: {action_rate_penalty}
+    #     pose_deviation_penalty: {pose_deviation_penalty}
+    #     height_deviation_penalty: {height_deviation_penalty}
+    #     rew_contact_forces: {rew_contact_forces}
+    # """)
+
+    # Total reward
+    total_reward = (
+        -1.0 * track_lin_reward +
+        0.2 * track_ang_reward +
+        -2.0 * penalize_z +
+        -0.005 * action_rate_penalty +
+        -0.1 * pose_deviation_penalty +
+        -100.0 * height_deviation_penalty +
+        -0.0 * rew_contact_forces
+    )
+
+    return total_reward
+
+
 def main(args, number):
     seed, GAMMA = args.seed, args.GAMMA
-
-    if args.env is "Go1":
-        env = Go1MujocoEnv(
-            ctrl_type="torque",
-            render_mode="rgb_array",
-        )
-        env_evaluate = Go1MujocoEnv(
-            ctrl_type="torque",
-            render_mode="rgb_array",
-        )
-        env_reset = Go1MujocoEnv(
-            ctrl_type="torque",
-            render_mode="rgb_array",
-        )
+    
+    env = gym.make(
+        "LocoMujoco", 
+        env_name=args.env,
+        reward_type="custom",
+        reward_params=dict(reward_callback=my_reward_function),
+        use_foot_forces=True,
+    )
+    env_evaluate = gym.make(
+        "LocoMujoco", 
+        env_name=args.env,
+        reward_type="custom",
+        reward_params=dict(reward_callback=my_reward_function),
+        use_foot_forces=True,
+    )
+    env_reset = gym.make(
+        "LocoMujoco", 
+        env_name=args.env,
+        reward_type="custom",
+        reward_params=dict(reward_callback=my_reward_function),
+        use_foot_forces=True,
+    )
 
     env.reset(seed=args.seed)
     env_evaluate.reset(seed=args.seed)
@@ -103,34 +196,34 @@ def main(args, number):
     args.max_episode_steps = 1000 
     # env._max_episode_steps  # Maximum number of steps per episode
     
+    print("env={}".format(args.env))
     print("state_dim={}".format(args.state_dim))
     print("action_dim={}".format(args.action_dim))
     print("max_action={}".format(args.max_action))
     print("max_episode_steps={}".format(args.max_episode_steps))
 
-
     evaluate_num = 0  # Record the number of evaluations
     evaluate_rewards = []  # Record the rewards during the evaluating
     total_steps = 0  # Record the total steps during the training
     max_value = -np.inf
-
-    train_time = time.strftime("%Y-%m-%d_%H-%M-%S")
-    model_save_path = f"./models/{train_time}/RNAC_QUAD"
+    save_path = f"./models/RNAC_{args.env}_{GAMMA}"
 
     replay_buffer = ReplayBuffer(args)
     agent = PPO_continuous(args)
 
     # Build a tensorboard
-    log_dir = f"runs/{train_time}/quadruped_dist_{args.policy_dist}_number_{number}_seed_{seed}_GAMMA_{GAMMA}"
-    writer = SummaryWriter(log_dir=log_dir)
+    writer = SummaryWriter(log_dir='runs/RNAC/env_{}_{}_number_{}_seed_{}_GAMMA_{}'.format(args.env, args.policy_dist, number, seed, GAMMA))
 
-    # Trick 2:state normalization
-    state_norm = Normalization(shape=args.state_dim)  
+    state_norm = Normalization(shape=args.state_dim)  # Trick 2:state normalization
     
     if args.use_reward_norm:  # Trick 3:reward normalization
         reward_norm = Normalization(shape=1)
     elif args.use_reward_scaling:  # Trick 4:reward scaling
         reward_scaling = RewardScaling(shape=1, gamma=args.gamma)
+
+    return None
+
+    # print(f"args.max_train_steps: {args.max_train_steps}")
 
     while total_steps < args.max_train_steps:
 
@@ -140,8 +233,7 @@ def main(args, number):
         s, _ = env.reset()
     
         # TODO: check and get x_pos
-        # s_org, x_pos = copy.deepcopy(s), np.array([env.unwrapped._data.qpos[0]])
-        s_org, x_pos = copy.deepcopy(s), np.array([env.unwrapped.data.qpos[0]])
+        s_org, x_pos = copy.deepcopy(s), np.array([env.unwrapped._data.qpos[0]])
 
         if args.use_state_norm:
             s = state_norm(s)
@@ -237,22 +329,22 @@ def main(args, number):
                 print("evaluate_num:{} \t evaluate_reward:{} \t".format(evaluate_num, evaluate_reward))
 
                 # Record on Tensorboard 
-                writer.add_scalar('step_rewards', evaluate_rewards[-1], global_step=total_steps)
+                writer.add_scalar('step_rewards_{}'.format(args.env), evaluate_rewards[-1], global_step=total_steps)
                 
                 # Save the rewards
                 if evaluate_num % args.save_freq == 0:
-                    np.save(f'./data_train/RNAC_plydist_{args.policy_dist}_num_{number}_seed_{seed}_r_{GAMMA}.npy', np.array(evaluate_rewards))
+                    np.save('./data_train/RNAC_{}_env_{}_number_{}_seed_{}_GAMMA_{}.npy'.format(args.policy_dist, args.env, number, seed, GAMMA), np.array(evaluate_rewards))
 
                 # save actor, critic for evaluation in perturbed environment
                 if evaluate_reward > max_value:
-                    save_agent(agent, model_save_path, state_norm, reward_scaling)
+                    save_agent(agent, save_path, state_norm, reward_scaling)
                     max_value = evaluate_reward
                     print(f"max value found from total_steps : {total_steps}")
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("Hyperparameters Setting for RNAC")
-    parser.add_argument("--env", type=str, default='Go1', help="A1/Go1/HalfCheetah-v4/Hopper-v3/Walker2d-v3")
+    parser.add_argument("--env", type=str, default='UnitreeA1.simple', help="HalfCheetah-v4/Hopper-v3/Walker2d-v3")
     parser.add_argument("--uncer_set", type=str, default='IPM', help="DS/IPM")
     parser.add_argument("--next_steps", type=int, default=2, help="Number of next states")
     parser.add_argument("--random_steps", type=int, default=int(25e3), help="Uniformlly sample action within random steps")
