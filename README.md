@@ -115,7 +115,7 @@ We use [loco_mujoco](https://github.com/robfiras/loco-mujoco) as our environment
 To train an RNAC policy on `UnitreeA1.simple` with DS uncertainty set, please run 
 
 ```bash
-python quad_train_rnac.py --env='UnitreeA1.simple' --uncer_set='IPM' --weight_reg=0.0
+python quad_train_rnac.py --env='Go1' --uncer_set='IPM' --weight_reg=0.0
 
 python quad_train_rnac.py --env='UnitreeA1.simple' --uncer_set='DS' --weight_reg=0.0
 
